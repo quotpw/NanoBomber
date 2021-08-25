@@ -21,16 +21,16 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 bot = Bot(token='1809099424:AAF9oqmz3IEXpdUmCFArpoiFWiJXJY0PF7w', parse_mode=_types.ParseMode.HTML)
 sql = Sql('database.db')
-qiwi_token = '7877301669a20de4c753d76f4059b1f5'
+qiwi_token = '6b58503ce511fd5b00146acbd29c60cd'
 qiwi_phone = '79384302457'
 listen_delay = 3
-month = 2628000
+until = 31536000
 
 
 async def tg_nano(chat_id, rank_id):
     await Sql("../engines/telegram/NanoBomber.db").async_query(
         "UPDATE users SET rank_id = ?, rank_until = ? WHERE chatid = ?",
-        [rank_id, int(time.time()) + month, chat_id]
+        [rank_id, int(time.time()) + until, chat_id]
     )
     try:
         await Bot("1117915604:AAEw3UqzzU_GIdfxMif8lJDCwmmQeKfPWx4").send_message(

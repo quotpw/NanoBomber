@@ -1,4 +1,4 @@
-token = "1117915604:AAEw3UqzzU_GIdfxMif8lJDCwmmQeKfPWx4"
+TG_TOKEN = "1117915604:AAHASBIQXVseruTST1nOd3ARy--w4D6yNwg"
 
-database_name = "NanoBomber.db"
-default_rank = 0
+DB_NAME = "NanoBomber.db"
+DEFOULT_RANK = 0

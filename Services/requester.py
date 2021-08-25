@@ -28,6 +28,7 @@ class Requester:
 
     # noinspection PyMethodMayBeStatic,PyUnusedLocal
     def __exception_handler(self, loop, context):
+        print(loop, context)
         pass
 
     def set_http_requests(self, services: list[Service]):
@@ -67,7 +68,7 @@ class Requester:
         # init proxy-connector if proxy set.
         connector = None
         if self.proxy:
-            connector = aioproxy.ProxyConnector.from_url(self.proxy)
+            connector = aioproxy.ProxyConnector.from_url(str(self.proxy))
 
         async with aiohttp.ClientSession(connector=connector,
                                          timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:

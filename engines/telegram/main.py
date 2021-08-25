@@ -15,9 +15,8 @@ from aiogram.types import ContentTypes
 from aiogram_broadcaster import MessageBroadcaster
 
 from func import *
-import dnn
 import Services
-import Services.proxyline
+import Services.proxoid
 
 from aiogram import Bot, Dispatcher, executor, types
 import config_file as cfg
@@ -30,8 +29,8 @@ if os.name == 'nt':  # If os == Шindows
 
 logging.basicConfig(level=logging.WARNING)
 
-sql = Sql(cfg.database_name)
-bot = Bot(token=cfg.token, parse_mode=types.ParseMode.HTML)
+sql = Sql(cfg.DB_NAME)
+bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot)
 
 
@@ -44,7 +43,7 @@ def spam(message: types.Message, phone: Services.phone.Phone, minutes: int):
 
 
 async def async_spam(message: types.Message, phone: Services.phone.Phone, minutes: int):
-    _bot = Bot(token=cfg.token, parse_mode=types.ParseMode.HTML)
+    _bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
     Bot.set_current(_bot)
 
     alive_until = time.time() + (minutes * 60)
@@ -63,10 +62,22 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
     )
 
     requester = Services.Services(phone)
-    await requester.async_load_from_sqlite3(cfg.database_name, 'services')
+    await requester.async_load_from_sqlite3(cfg.DB_NAME, 'services')
     while (await sql.thread_alive(thread_id)) and time.time() < alive_until:
+        proxy = Services.proxoid.proxy.rotated_proxy  # None
+
+        # while proxy is None:
+        #     temp_proxy = Services.proxoid.proxy.rotated_proxy
+        #     try:
+        #         fut = asyncio.open_connection(temp_proxy.ip, int(temp_proxy.port))  # proxy.ip, proxy.port
+        #         await asyncio.wait_for(fut, timeout=2)
+        #         proxy = temp_proxy
+        #     except:
+        #         temp_proxy.report()
+        # print(proxy)
+
         try:
-            await requester.async_run(proxy=Services.proxyline.proxy.rotated_proxy)
+            await requester.async_run(proxy=proxy)
         except:
             logging.error(traceback.format_exc())
 
@@ -114,64 +125,6 @@ async def start_spam_handler(message: types.Message):
         return
 
     threading.Thread(target=spam, args=[message, phone, int(bomb_info[1])]).start()
-
-
-@dp.message_handler(regexp="^[+]*\d{10,}")
-async def start_spam_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if not rank.access:
-        return
-
-    phone = Services.phone.Phone(message.text)
-
-    if not phone.valid:
-        await message.answer("Вы указали неверный номер телефона.")
-        return
-
-    result = await dnn.deanon(phone.number)
-
-    text = f"""📱
-├ <b>Номер</b>: <code>{phone.number}</code>
-├ <b>Страна</b>: {phone.region.upper()}
-└ <b>Оператор</b>: {phone.operator}"""
-
-    if result['phones']:
-        result['phones'].pop(0)
-        if result['phones']:
-            text += "\n\n📞 <b>Связанные с ним номера:</b> "
-            for number in result['phones'][:-1]:
-                text += f"\n├  <code>{number}</code>"
-            text += f"\n└  <code>{result['phones'][-1]}</code>"
-
-    if result['names']:
-        text += f"\n\n📓<b> Возможные имена:</b>"
-        for name in result['names'][:-1]:
-            text += f"\n├  <b>{name}</b>"
-        text += f"\n└  <b>{result['names'][-1]}</b>"
-
-    if result['emails']:
-        text += f"\n\n📓<b> Почтовые ящики:</b>"
-        for email in result['emails'][:-1]:
-            text += f"\n├  <b>{email}</b>"
-        text += f"\n└  <b>{result['emails'][-1]}</b>"
-
-    if result['tg_usernames']:
-        text += f"\n\n📓<b> Аккаунты в телеграм:</b>"
-        for username in result['tg_usernames'][:-1]:
-            text += f"\n├  @{username}"
-        text += f"\n└  @{result['tg_usernames'][-1]}"
-
-    text += "\n\n<b>=== Это все 🤷‍♂️ ===</b>"
-    try:
-        await message.answer(
-            text
-        )
-    except:
-        await message.answer(
-            "Слишком большой объем данных для этого номера, отпиши админу - @coder3301"
-        )
 
 
 @dp.message_handler(commands=['stats'])
@@ -317,7 +270,7 @@ def mailing_to_users(message: types.Message):
 
 
 async def async_mailing_to_users(message: types.Message):
-    _bot = Bot(token=cfg.token, parse_mode=types.ParseMode.HTML)
+    _bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
     Bot.set_current(_bot)
 
     users = await sql.get_users_chatid()
@@ -381,7 +334,7 @@ async def text_handler(message: types.Message):
 
     if user.rank_until:  # if time expiration set
         if user.rank_until < time.time():  # if expire
-            await sql.change_rank(message.chat.id, cfg.default_rank, 0)  # set default rank
+            await sql.change_rank(message.chat.id, cfg.DEFOULT_RANK, 0)  # set default rank
             await message.answer(f'Ваш тариф закончился {stamp_to_date(user.rank_until)}')
             await text_handler(message)  # run handler again
             return  # exit
@@ -450,14 +403,6 @@ async def text_handler(message: types.Message):
                 "🇺🇦<code>380501334228 7</code>\n"
                 "(другие страны тоже работают)"
             )
-        elif message.text == "🔍Пробив🔎":
-            await message.answer(
-                "<b>Просто напишите номер телефона</b>\n\n"
-                "Допустимые форматы:\n"
-                "🇷🇺<code>79000000228</code>\n"
-                "🇺🇦<code>380501334228</code>\n"
-                "(другие страны работают 50 на 50)"
-            )
         elif message.text == "👤Профиль👤":
             await message.answer(
                 "⠀   <b>Ваш профиль:</b>\n\n"
@@ -501,7 +446,6 @@ async def text_handler(message: types.Message):
         else:
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
             markup.add("💣BOMB💣")
-            markup.add("🔍Пробив🔎")
             if rank.can_buy:
                 markup.add("Тарифные планы💳")
             markup.add("👤Профиль👤")

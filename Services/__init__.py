@@ -1,5 +1,7 @@
 import asyncio
 import os
+import random
+
 import orjson
 
 import sql
@@ -71,13 +73,15 @@ class Services:
 
     @property
     def prepared_services(self):
-        return [self.prepare_service(service) for service in self.services]
+        services_list = [self.prepare_service(service) for service in self.services]
+        random.shuffle(services_list)
+        return services_list
 
-    async def async_run(self, timeout=15, size=50, proxy=None):
+    async def async_run(self, timeout=12, size=50, proxy=None):
         req = Requester(self.prepared_services, timeout, proxy)
         await req.async_run(size)
 
-    def run(self, timeout=15, size=50, proxy=None, debug=False):
+    def run(self, timeout=12, size=50, proxy=None, debug=False):
         req = Requester(self.prepared_services, timeout, proxy)
         req.debug = debug
         req.run(size)
