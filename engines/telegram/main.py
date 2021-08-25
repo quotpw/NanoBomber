@@ -350,7 +350,7 @@ async def text_handler(message: types.Message):
                        f"<code>{_rank.price}</code><i>rub.</i>\n"
                        f"Приобрести - /buy_{_rank.rank_id}"
                        for _rank in available_ranks])) + \
-                   "\n\n\nВсе тарифы <b>приобритаются на месяц</b>!\n" \
+                   "\n\n\nВсе тарифы <b>приобритаются на год</b>!\n" \
                    "Возрата - нет."
             await message.answer(text)
             return
