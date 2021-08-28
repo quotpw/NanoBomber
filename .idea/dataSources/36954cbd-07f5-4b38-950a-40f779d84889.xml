@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dataSource name="NanoBomber.db">
   <database-model serializer="dbm" dbms="SQLITE" family-id="SQLITE" format-version="4.23">
-    <root id="1"/>
+    <root id="1">
+      <ServerVersion>3.34.0</ServerVersion>
+    </root>
     <schema id="2" parent="1" name="main">
       <Current>1</Current>
     </schema>
@@ -1477,33 +1479,37 @@
     </column>
     <column id="527" parent="175" name="chatid">
       <Position>2</Position>
-      <DataType>VARCHAR|0s</DataType>
+      <DataType>int|0s</DataType>
       <NotNull>1</NotNull>
     </column>
-    <column id="528" parent="176" name="chatid">
+    <column id="528" parent="175" name="until">
+      <Position>3</Position>
+      <DataType>int|0s</DataType>
+    </column>
+    <column id="529" parent="176" name="chatid">
       <Position>1</Position>
       <DataType>INT|0s</DataType>
       <NotNull>1</NotNull>
     </column>
-    <column id="529" parent="176" name="rank_id">
+    <column id="530" parent="176" name="rank_id">
       <Position>2</Position>
       <DataType>INT|0s</DataType>
       <NotNull>1</NotNull>
       <DefaultExpression>0</DefaultExpression>
     </column>
-    <column id="530" parent="176" name="rank_until">
+    <column id="531" parent="176" name="rank_until">
       <Position>3</Position>
       <DataType>INT|0s</DataType>
       <NotNull>1</NotNull>
       <DefaultExpression>0</DefaultExpression>
     </column>
-    <index id="531" parent="176" name="sqlite_autoindex_users_1">
+    <index id="532" parent="176" name="sqlite_autoindex_users_1">
       <NameSurrogate>1</NameSurrogate>
       <ColNames>chatid</ColNames>
       <ColumnCollations></ColumnCollations>
       <Unique>1</Unique>
     </index>
-    <key id="532" parent="176">
+    <key id="533" parent="176">
       <ColNames>chatid</ColNames>
       <UnderlyingIndexName>sqlite_autoindex_users_1</UnderlyingIndexName>
     </key>

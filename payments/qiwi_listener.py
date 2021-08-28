@@ -70,6 +70,7 @@ async def main():
         w.phone_number = qiwi_phone
         while True:
             try:
+                # noinspection PyTypeChecker
                 transactions = await w.transactions(operation='IN')
                 for trans in transactions:
                     count = (await sql.async_query(

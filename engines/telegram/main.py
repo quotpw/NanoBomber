@@ -11,6 +11,9 @@ import threading
 import time
 import uuid
 
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
 from aiogram.types import ContentTypes
 from aiogram_broadcaster import MessageBroadcaster
 
@@ -18,7 +21,6 @@ from func import *
 import Services
 import Services.proxoid
 
-from aiogram import Bot, Dispatcher, executor, types
 import config_file as cfg
 from _sql import Sql
 
@@ -27,11 +29,11 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 if os.name == 'nt':  # If os == Шindows
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # fix for "Asyncio Event Loop is Closed"
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARNING)  # WARNING
 
 sql = Sql(cfg.DB_NAME)
 bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, storage=MemoryStorage())
 
 
 def spam(message: types.Message, phone: Services.phone.Phone, minutes: int):
@@ -48,10 +50,10 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
 
     alive_until = time.time() + (minutes * 60)
     thread_id = str(uuid.uuid4())
-    await sql.create_thread(thread_id, message.chat.id)
+    await sql.create_thread(thread_id, message.chat.id, alive_until)
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("Остановить⛔️", callback_data=f"stop_thr::{thread_id}"))
+    markup.add(types.InlineKeyboardButton("Остановить⛔️", callback_data=f"stop_thread::{thread_id}"))
     spam_info_msg = await message.reply(
         "<b>Спам успешно запущен!</b>\n\n"
         f"<b>Жертва</b>:  <code>{phone.number}</code>\n"
@@ -125,135 +127,6 @@ async def start_spam_handler(message: types.Message):
         return
 
     threading.Thread(target=spam, args=[message, phone, int(bomb_info[1])]).start()
-
-
-@dp.message_handler(commands=['stats'])
-async def stats_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        await message.answer(
-            f"<b>Пользователей всего</b>: <code>{await sql.count_of_users()}</code>\n\n" +
-            ("\n".join([f"{_rank['rank_id']}) {_rank['name']}: <code>{_rank['count']}</code>" for _rank in
-                        await sql.get_rank_stats()])) +
-            F"\n\n<b>Запущеных потоков</b>: <code>{await sql.count_threads()}</code>"
-        )
-
-
-@dp.message_handler(regexp='^/set_rank \d+ \d+')
-async def change_rank_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        args = message.text.split()[1:]
-
-        selected_rank = await sql.get_rank(args[1], False)
-        if selected_rank:
-            selected_rank = selected_rank[0]
-
-            await sql.change_rank(args[0], selected_rank.rank_id)
-
-            try:
-                await bot.send_message(int(args[0]), f'Ваш ранг был сменен на {selected_rank.name}.\n'
-                                                     f'Нажмите /start чтоб обновить клавиатуру.')
-            except:
-                pass
-
-            await message.answer(f"Ранг пользователя был изменен на {selected_rank.name}.")
-        else:
-            await message.reply("Извини, но такого ранга нету.")
-
-
-@dp.message_handler(regexp='^/set_expire \d+ \d+')
-async def set_expire_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        args = message.text.split()[1:]
-
-        await sql.change_expire(args[0], args[1])
-
-        until = subscribe_until(int(args[1]))
-        try:
-            await bot.send_message(
-                int(args[0]),
-                f'Ваша подписка была продлена до {until}'
-            )
-        except:
-            pass
-
-        await message.answer(f"Подписка пользователя была продлена до {until}")
-
-
-@dp.message_handler(commands=['stop_threads'])
-async def stop_threads_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        await sql.delete_threads()
-        await message.answer("Успешно остановлены все потоки!")
-
-
-@dp.message_handler(regexp='^/gen_promo \d+ \d+')
-async def promo_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        args = message.text.split()[1:]
-        _rank = await sql.get_rank(args[0], False)
-        if _rank:
-            uid = await sql.create_promo(str(uuid.uuid4()).split('-')[0], _rank[0].rank_id, args[1])
-            await message.answer(f"Ваш промокод на подписку {_rank[0].name} создан:\n"
-                                 f"https://t.me/nanobomber_bot?start={uid}\n\n"
-                                 f"<b>Подписка будет активна до</b>: {subscribe_until(int(args[1]))}")
-        else:
-            await message.answer("Ранга не существует.")
-
-
-@dp.message_handler(regexp='^/ban \d+')
-async def ban_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        args = message.text.split()[1:]
-        await sql.change_rank(args[0], -1, 0)
-        try:
-            await bot.send_message(args[0], "Чучело, тя забанили нахуй, соси хуец - молодец💋")
-        except:
-            pass
-        await message.answer("Пользователь забанен нахуй!")
-
-
-@dp.message_handler(regexp='^/profile \d+')
-async def profile_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if rank.admin:
-        args = message.text.split()[1:]
-        selected_user = await sql.get_user(args[0], False)
-        if selected_user:
-            selected_user = selected_user[0]
-            user_rank = await sql.get_rank(selected_user.rank_id)
-            await message.answer(
-                "⠀   <b>Профиль пользователя:</b>\n\n"
-                f"🆔: <code>{selected_user.chatid}</code>\n"
-                f"<i>Ранг</i>: <code>{user_rank.name}</code>\n"
-                f"<i>Максимум минут</i>: <code>{user_rank.count_min}</code>\n"
-                f"<i>Потоков</i>: <code>{await sql.count_threads(message.chat.id)}</code>"
-                f"/"
-                f"<code>{user_rank.count_threads}</code>\n\n"
-                f"<b>Подписка до</b>: "
-                f"{subscribe_until(selected_user.rank_until)}"
-            )
-        else:
-            await message.answer("Пользователя не существует.")
 
 
 @dp.message_handler(commands=['chatid'])
@@ -334,7 +207,7 @@ async def text_handler(message: types.Message):
 
     if user.rank_until:  # if time expiration set
         if user.rank_until < time.time():  # if expire
-            await sql.change_rank(message.chat.id, cfg.DEFOULT_RANK, 0)  # set default rank
+            await sql.change_rank(message.chat.id, cfg.DEFAULT_RANK, 0)  # set default rank
             await message.answer(f'Ваш тариф закончился {stamp_to_date(user.rank_until)}')
             await text_handler(message)  # run handler again
             return  # exit
@@ -350,7 +223,7 @@ async def text_handler(message: types.Message):
                        f"<code>{_rank.price}</code><i>rub.</i>\n"
                        f"Приобрести - /buy_{_rank.rank_id}"
                        for _rank in available_ranks])) + \
-                   "\n\n\nВсе тарифы <b>приобритаются на месяц</b>!\n" \
+                   "\n\n\nВсе тарифы <b>приобритаются на год</b>!\n" \
                    "Возрата - нет."
             await message.answer(text)
             return
@@ -414,32 +287,18 @@ async def text_handler(message: types.Message):
                 f"<code>{rank.count_threads}</code>\n\n"
                 f"<b>Подписка до</b>: {subscribe_until(user.rank_until)}"
             )
-        elif rank.admin and message.text == 'Admin panel':
-            await message.answer(
-                "<b>Statistics</b> — <i>/stats</i>\n"
-                "Example: <code>/stats</code>\n"
-                "\n"
-                "<b>Change user rank</b> — <i>/set_rank chat-id rank-id</i>\n"
-                "Example: <code>/set_rank 735801023 0</code>\n"
-                "\n"
-                "<b>Set expire time</b> — <i>/set_expire chat-id until-time-stamp</i>\n"
-                "Example: <code>/set_expire 735801023 1627069275</code>\n"
-                "\n"
-                "<b>Stop all threads</b> — <i>/stop_threads</i>\n"
-                "Example: <code>/stop_threads</code>\n"
-                "\n"
-                "<b>Gen promo-code</b> — <i>/gen_promo rank-id until-time-stamp</i>\n"
-                "Example: <code>/gen_promo 1 1627069275</code>\n"
-                "\n"
-                "<b>Ban user</b> — <i>/ban chat-id</i>\n"
-                "Example: <code>/ban 735801023</code>\n"
-                "\n"
-                "<b>Get user profile</b> — <i>/profile chat-id</i>\n"
-                "Example: <code>/profile 735801023</code>\n"
-                # "\n"
-                # "<b></b> — <i>/</i>\n"
-                # "Example: <code>/</code>\n"
-                # "\n"
+        elif rank.admin and message.text == 'ADM':
+            markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+            markup.add(types.InlineKeyboardButton("Статистика", callback_data="stats"))
+            markup.add(
+                types.InlineKeyboardButton("Пользователь", callback_data="user"),
+                types.InlineKeyboardButton("Промокоды", callback_data="promo"),
+                types.InlineKeyboardButton("Тарифы", callback_data="tariff")
+            )
+            markup.add(types.InlineKeyboardButton("Остановить все потоки", callback_data="stop_all_threads"))
+            await message.answer_photo(
+                open("img/adminpanel.png", 'rb'),
+                reply_markup=markup
             )
         elif message.text == '🛠Support🛠':
             await supports(message)
@@ -450,7 +309,7 @@ async def text_handler(message: types.Message):
                 markup.add("Тарифные планы💳")
             markup.add("👤Профиль👤")
             if rank.admin:
-                markup.add("Admin panel")
+                markup.add("ADM")
             else:
                 markup.add("🛠Support🛠")
 
@@ -460,8 +319,131 @@ async def text_handler(message: types.Message):
             )
 
 
-@dp.callback_query_handler()
-async def inline_callback(query: types.CallbackQuery):
+@dp.message_handler(state='user_profile')
+async def test(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        menu_message_id = data.get('message_id')
+        need_edit = data.get("need_edit")
+
+    user = await sql.get_user(message.text, return_user=False)
+    await bot.delete_message(message.chat.id, message.message_id)
+
+    if user:
+        await state.finish()
+        await show_user_profile(message.chat.id, menu_message_id, user[0])
+    else:
+        if need_edit:
+            await state.update_data(need_edit=False)
+
+            markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+            markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data="admin"))
+            await bot.edit_message_caption(
+                message.chat.id,
+                menu_message_id,
+                caption="Увы, я не нашел такого пользователя, попытайтесь еще раз!",
+                reply_markup=markup
+            )
+
+
+async def show_promo(chat_id, message_id, update_photo=True):
+    if update_photo:
+        await bot.edit_message_media(
+            types.InputMedia(type='photo', media=open("img/promo.png", 'rb')),
+            chat_id,
+            message_id
+        )
+
+    markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.InlineKeyboardButton("Создать", callback_data=f"create_promo"))
+    markup.add(types.InlineKeyboardButton("Удалить все", callback_data=f"delete_all_promo"))
+    markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data="admin"))
+
+    await bot.edit_message_caption(
+        chat_id,
+        message_id,
+        caption=f"<b>Число активных промо-кодов:</b> <code>{await sql.count_promo()}</code>",
+        reply_markup=markup
+    )
+
+
+async def show_user_profile(chat_id, message_id, user, update_photo=True):
+    if update_photo:
+        await bot.edit_message_media(
+            types.InputMedia(type='photo', media=open("img/profile.png", 'rb')),
+            chat_id,
+            message_id
+        )
+
+    markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+    markup.add(
+        types.InlineKeyboardButton("Тариф", callback_data=f"change_rank::{user.chatid}"),
+        types.InlineKeyboardButton("Длительность", callback_data=f"change_expire::{user.chatid}")
+    )
+    markup.add(types.InlineKeyboardButton("Сброс потоков", callback_data=f"stop_threads::{user.chatid}"))
+    markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data="admin"))
+
+    rank = await sql.get_rank(user.rank_id)
+    tg_info = await bot.get_chat(user.chatid)
+
+    await bot.edit_message_caption(
+        chat_id,
+        message_id,
+        caption=f"🆔: <code>{user.chatid}</code>\n\n"
+                f"<i>Ранг</i>: <code>{rank.name}</code>\n"
+                f"<i>Максимум минут</i>: <code>{rank.count_min}</code>\n"
+                f"<i>Потоков</i>: <code>{await sql.count_threads(user.chatid)}</code>"
+                f"/"
+                f"<code>{rank.count_threads}</code>\n\n"
+                f"<b>Подписка до</b>: "
+                f"{subscribe_until(user.rank_until)}\n\n"
+                f"<b>Telegram-Info:</b>\n"
+                f"Name: {tg_info.first_name}|{tg_info.last_name}\n"
+                f"Username: @{tg_info.username}",
+        reply_markup=markup
+    )
+
+
+async def show_select_rank(chat_id, message_id, return_callback, back):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(*[
+        types.InlineKeyboardButton(rank.name, callback_data=return_callback + f"::{rank.rank_id}")
+        for rank in await sql.get_ranks()
+    ])
+    markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data=back))
+
+    await bot.edit_message_media(
+        types.InputMedia(type='photo', media=open("img/selectrank.png", 'rb')),
+        chat_id,
+        message_id,
+        reply_markup=markup
+    )
+
+
+async def show_expire(chat_id, message_id, return_callback, back):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(*[
+        types.InlineKeyboardButton("1 День", callback_data=return_callback + f"::{1}"),
+        types.InlineKeyboardButton("7 Дней", callback_data=return_callback + f"::{7}"),
+        types.InlineKeyboardButton("14 Дней", callback_data=return_callback + f"::{14}")
+    ])
+    markup.add(*[
+        types.InlineKeyboardButton("1 Месяц", callback_data=return_callback + f"::{int(1 * 30.417)}"),
+        types.InlineKeyboardButton("3 Месяца", callback_data=return_callback + f"::{int(3 * 30.417)}"),
+        types.InlineKeyboardButton("9 Месяцев", callback_data=return_callback + f"::{int(9 * 30.417)}")
+    ])
+    markup.add(types.InlineKeyboardButton("1 Год", callback_data=return_callback + f"::{365}"))
+    markup.add(types.InlineKeyboardButton("Навсегда☄️", callback_data=return_callback + f"::{0}"))
+    markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data=back))
+    await bot.edit_message_media(
+        types.InputMedia(type='photo', media=open("img/selectexpire.png", 'rb')),
+        chat_id,
+        message_id,
+        reply_markup=markup
+    )
+
+
+@dp.callback_query_handler(state='*')
+async def inline_callback(query: types.CallbackQuery, state: FSMContext):
     user = await sql.get_user(query.message.chat.id)
     rank = await sql.get_rank(user.rank_id)
 
@@ -470,7 +452,7 @@ async def inline_callback(query: types.CallbackQuery):
 
     data_form = query.data.split("::")
 
-    if data_form[0] == 'stop_thr':
+    if data_form[0] == 'stop_thread':
         await sql.delete_thread(data_form[1], query.message.chat.id)
         await query.answer("Ожидайте, поток останавливается!")
     elif data_form[0] == 're_spam':
@@ -482,7 +464,138 @@ async def inline_callback(query: types.CallbackQuery):
         else:
             threading.Thread(target=spam, args=[query.message, Services.Phone(data_form[1]), int(data_form[2])]).start()
             await query.answer()
+
+    elif rank.admin and data_form[0] == 'user':
+        await state.set_state("user_profile")
+        await state.update_data(message_id=query.message.message_id, need_edit=True)
+
+        markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data="admin"))
+        await bot.edit_message_media(
+            types.InputMedia(type='photo', media=open("img/sendchatid.png", 'rb')),
+            query.message.chat.id,
+            query.message.message_id,
+            reply_markup=markup
+        )
+
+        await query.answer()
+    elif rank.admin and data_form[0] == 'back_to_profile':
+        await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+    elif rank.admin and data_form[0] == 'change_rank':
+        if len(data_form) == 2:
+            await show_select_rank(
+                query.message.chat.id,
+                query.message.message_id,
+                query.data,
+                f"back_to_profile::{data_form[1]}"
+            )
+            await query.answer()
+        elif len(data_form) == 3:
+            await sql.change_rank(data_form[1], data_form[2])
+            await query.answer("Тариф успешно изменен!")
+            await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+    elif rank.admin and data_form[0] == 'change_expire':
+        if len(data_form) == 2:
+            await show_expire(
+                query.message.chat.id,
+                query.message.message_id,
+                query.data,
+                f"back_to_profile::{data_form[1]}"
+            )
+            await query.answer()
+        elif len(data_form) == 3:
+            await sql.change_expire(
+                data_form[1], 0 if data_form[2] == '0' else time.time() + (int(data_form[2]) * 24 * 60 * 60)
+            )
+            await query.answer("Тариф успешно продлен!")
+            await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+    elif rank.admin and data_form[0] == 'stop_threads':
+        await sql.delete_user_threads(data_form[1])
+        await query.answer("Потоки пользователя остановлены!")
+        await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+
+    elif rank.admin and data_form[0] == 'promo':
+        await show_promo(query.message.chat.id, query.message.message_id)
+    elif rank.admin and data_form[0] == 'create_promo':
+        if len(data_form) == 1:
+            await show_select_rank(
+                query.message.chat.id,
+                query.message.message_id,
+                query.data,
+                f"promo"
+            )
+        elif len(data_form) == 2:
+            await show_expire(
+                query.message.chat.id,
+                query.message.message_id,
+                query.data,
+                f"promo"
+            )
+        elif len(data_form) == 3:
+            until = 0 if data_form[2] == '0' else time.time() + (int(data_form[2]) * 24 * 60 * 60)
+            promo = await sql.create_promo(
+                str(uuid.uuid4()).split('-')[0],
+                data_form[1],
+                until
+            )
+            await query.message.answer(
+                f"Промо-код на подписку <b>{(await sql.get_rank(data_form[1])).name}</b>:\n"
+                f"https://t.me/nanobomber_bot?start={promo}\n\n"
+                f"<b>Будет активен до</b>: {subscribe_until(until)}"
+            )
+            await query.answer("Success!")
+            await show_promo(query.message.chat.id, query.message.message_id)
+    elif rank.admin and data_form[0] == 'delete_all_promo':
+        await sql.delete_all_promo()
+        await show_promo(query.message.chat.id, query.message.message_id, False)
+        await query.answer("Все промо-коды успешно удалены!")
+
+    elif rank.admin and data_form[0] == 'tariff':
+        await query.answer("Мнеее лееень бляяять, я по-моему и так много сделал.")
+
+    elif rank.admin and data_form[0] == 'admin':
+        await state.reset_state()
+        # Edit photo and set markup
+        markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.InlineKeyboardButton("Статистика", callback_data="stats"))
+        markup.add(
+            types.InlineKeyboardButton("Пользователь", callback_data="user"),
+            types.InlineKeyboardButton("Промокоды", callback_data="promo"),
+            types.InlineKeyboardButton("Тарифы", callback_data="tariff")
+        )
+        markup.add(types.InlineKeyboardButton("Остановить все потоки", callback_data="stop_all_threads"))
+        await bot.edit_message_media(
+            types.InputMedia(type='photo', media=open("img/adminpanel.png", 'rb')),
+            query.message.chat.id,
+            query.message.message_id,
+            reply_markup=markup
+        )
+
+        await query.answer()
+    elif rank.admin and data_form[0] == 'stats':
+        # Edit photo
+        await bot.edit_message_media(
+            types.InputMedia(type='photo', media=open("img/stats.png", 'rb')),
+            query.message.chat.id,
+            query.message.message_id
+        )
+
+        # edit caption (message)
+        markup = types.InlineKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data="admin"))
+        await bot.edit_message_caption(
+            query.message.chat.id,
+            query.message.message_id,
+            caption=f"<b>Пользователей всего</b>: <code>{await sql.count_of_users()}</code>\n\n" +
+                    ("\n".join([f"{_rank['rank_id']}) {_rank['name']}: <code>{_rank['count']}</code>" for _rank in
+                                await sql.get_rank_stats()])) +
+                    F"\n\n<b>Запущеных потоков</b>: <code>{await sql.count_threads()}</code>",
+            reply_markup=markup
+        )
+
+        await query.answer("Отчет подготовлен✅")
     else:
+        print(data_form)
         await query.answer()
 
 

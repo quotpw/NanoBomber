@@ -9,6 +9,8 @@ class Phone:
     def __init__(self, phone: str, laungue="en"):
         try:
             obj = ph.parse('+' + phone, keep_raw_input=True)
+            self.region = carrier.region_code_for_number(obj).lower()
+            self.operator = carrier.name_for_number(obj, laungue)
         except:
             self.valid = False
             return
@@ -17,8 +19,6 @@ class Phone:
         self.num = str(obj.national_number)
         self.code = str(obj.country_code)
         self.number = self.code + self.num
-        self.region = carrier.region_code_for_number(obj).lower()
-        self.operator = carrier.name_for_number(obj, laungue)
 
     def prepare_text(self, text):
         if not text:
@@ -58,4 +58,3 @@ class Phone:
 
     def __repr__(self):
         return f"""Phone<(+{self.code}){self.num}|Region: [{self.region}]|Operator: [{self.operator}]>"""
-

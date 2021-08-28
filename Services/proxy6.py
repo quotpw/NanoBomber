@@ -48,6 +48,7 @@ class Proxy6:
     def proxies(self):
         temp = self.getproxy()
         proxies = []
+        # noinspection PyShadowingNames
         for proxy in temp["list"]:
             proxies.append(f"{proxy['type']}://{proxy['user']}:{proxy['pass']}@{proxy['ip']}:{proxy['port']}")
         return proxies

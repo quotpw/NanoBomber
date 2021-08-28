@@ -37,6 +37,7 @@ class Proxyline:
             }
         )
 
+    # noinspection PyShadowingNames
     @property
     def proxies(self):
         temp = self.getproxy().json()
