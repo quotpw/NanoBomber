@@ -26,11 +26,11 @@ class Services:
         self.services = [*services]
 
     # noinspection SqlResolve
-    async def async_load_from_sqlite3(self, db_name, db_table, region_column='region'):
+    async def async_load_from_sqlite3(self, db_conf, db_table, region_column='region'):
         self.services.clear()
-        db = Sql(db_name)
+        db = Sql(**db_conf)
         rows = await db.async_query(
-            f"SELECT * FROM {db_table} WHERE {region_column} IS NULL OR {region_column} = ?",
+            f"SELECT * FROM `{db_table}` WHERE `{region_column}` IS NULL OR `{region_column}` = ?",
             [self.phone.region],
             row_type=sql.dict_factory
         )
@@ -67,7 +67,10 @@ class Services:
                 data = self.phone.prepare_text(service.data)
 
         if service.json:
-            json = orjson.loads(self.phone.prepare_text(service.json))
+            try:
+                json = orjson.loads(self.phone.prepare_text(service.json))
+            except:
+                print(self.phone.prepare_text(service.json))
 
         return Service(service.method.lower(), url, params, headers, data, json)
 

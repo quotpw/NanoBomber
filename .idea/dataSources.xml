@@ -1,26 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="NanoBomber.db" uuid="36954cbd-07f5-4b38-950a-40f779d84889">
-      <driver-ref>sqlite.xerial</driver-ref>
+    <data-source source="LOCAL" name="MySQL - nanobomber@nano.quot.pw" uuid="10c83863-63c7-4a39-ae40-9fef40d8c376">
+      <driver-ref>mysql.8</driver-ref>
       <synchronize>true</synchronize>
-      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/engines/telegram/NanoBomber.db</jdbc-url>
+      <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
+      <jdbc-url>jdbc:mysql://nano.quot.pw:3306/nanobomber</jdbc-url>
+      <vm-options>&quot;-Djdk.tls.disabledAlgorithms=SSLv3, TLSv1, RC4, DES, MD5withRSA, DH keySize &lt; 1024, EC keySize &lt; 224, 3DES_EDE_CBC, anon, NULL, include jdk.disabled.namedCurves&quot;</vm-options>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
-    <data-source source="LOCAL" name="database.db" uuid="cd8dde61-b89f-4b9c-bd2e-7b9b52f909a1">
+    <data-source source="LOCAL" name="database" uuid="ce6b9a69-b561-4772-a1eb-198ace71b69c">
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/payments/database.db</jdbc-url>
+      <jdbc-url>jdbc:sqlite:C:\Users\edman\Desktop\Bomber\payments\database.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
-    </data-source>
-    <data-source source="LOCAL" name="dnn.db" uuid="8f959aac-6dc2-466b-a43e-aced21c45f64">
-      <driver-ref>sqlite.xerial</driver-ref>
-      <synchronize>true</synchronize>
-      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:D:/edman/Desktop/Bomber/engines/telegram/dnn.db</jdbc-url>
-      <working-dir>$ProjectFileDir$</working-dir>
+      <libraries>
+        <library>
+          <url>file://$APPLICATION_CONFIG_DIR$/jdbc-drivers/Xerial SQLiteJDBC/3.34.0/sqlite-jdbc-3.34.0.jar</url>
+        </library>
+      </libraries>
     </data-source>
   </component>
 </project>

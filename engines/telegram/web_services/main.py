@@ -3,15 +3,18 @@ import sys
 sys.path.append("../../..")
 
 import requests
+import sentry_sdk
 from flask import Flask, request, render_template, redirect
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import generate_password_hash, check_password_hash
 import Services
 from sql import Sql
+from engines.telegram.config_file import DB_CONF
 
+sentry_sdk.init("https://1d85405c99be48b78d56623a552cb305@o453662.ingest.sentry.io/5944955", traces_sample_rate=1.0)
 app = Flask(__name__)
 auth = HTTPBasicAuth()
-sql = Sql('../NanoBomber.db')
+sql = Sql(**DB_CONF)
 
 users = {
     "nanobomb": generate_password_hash("EdMaN1337")
@@ -38,10 +41,10 @@ def services():
         action = request.args.get('action')
         serv_id = request.args.get('id')
         if action == 'delete':
-            sql.query("DELETE FROM services WHERE id = ?", [serv_id])
+            sql.query("DELETE FROM `services` WHERE `id`= ?", [serv_id])
         elif action == 'test':
             return redirect(f'/test_service?id={serv_id}')
-        return render_template('services_list.html', services=sql.query("SELECT * FROM services"))
+        return render_template('services_list.html', services=sql.query("SELECT * FROM `services`"))
 
 
 @app.route('/test_service', methods=['get'])
@@ -49,7 +52,7 @@ def test_service():
     service_id = request.args.get('id')
     phone = request.args.get('phone')
     if service_id and phone:
-        service = sql.query("SELECT * FROM services WHERE id = ?", [service_id])
+        service = sql.query("SELECT * FROM `services` WHERE `id` = ?", [service_id])
         if not service:
             return redirect('/services')
         else:
@@ -128,7 +131,7 @@ def new_service():
             return render_template("staryj_service.html", **request.form.to_dict())
         elif request.form.get('req_type') == 'Add':
             sql.query(
-                "INSERT INTO services(method, url, params, headers, data, json, region) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO `services`(`method`, `url`, `params`, `headers`, `data`, `json`, `region`) VALUES(?, ?, ?, ?, ?, ?, ?)",
                 [
                     request.form.get('method') if request.form.get('method') else None,
                     request.form.get('url') if request.form.get('url') else None,
@@ -145,7 +148,7 @@ def new_service():
 
 @app.route('/count_of_services', methods=['get'])
 def serv_count():
-    return str(sql.query("SELECT COUNT(url) FROM services")[0].COUNTurl)
+    return str(sql.query("SELECT COUNT(`url`) FROM `services`")[0].COUNTurl)
 
 
 if __name__ == '__main__':

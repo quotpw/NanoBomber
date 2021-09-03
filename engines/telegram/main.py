@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 
+import sentry_sdk
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -29,9 +30,10 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 if os.name == 'nt':  # If os == Шindows
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # fix for "Asyncio Event Loop is Closed"
 
+sentry_sdk.init("https://5ee299beebac4280a92fc9a1b591a69b@o453662.ingest.sentry.io/5944929", traces_sample_rate=1.0)
 logging.basicConfig(level=logging.WARNING)  # WARNING
 
-sql = Sql(cfg.DB_NAME)
+sql = Sql(**cfg.DB_CONF)
 bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
@@ -64,20 +66,18 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
     )
 
     requester = Services.Services(phone)
-    await requester.async_load_from_sqlite3(cfg.DB_NAME, 'services')
+    await requester.async_load_from_sqlite3(cfg.DB_CONF, 'services')
     while (await sql.thread_alive(thread_id)) and time.time() < alive_until:
-        proxy = Services.proxoid.proxy.rotated_proxy  # None
-
-        # while proxy is None:
-        #     temp_proxy = Services.proxoid.proxy.rotated_proxy
-        #     try:
-        #         fut = asyncio.open_connection(temp_proxy.ip, int(temp_proxy.port))  # proxy.ip, proxy.port
-        #         await asyncio.wait_for(fut, timeout=2)
-        #         proxy = temp_proxy
-        #     except:
-        #         temp_proxy.report()
-        # print(proxy)
-
+        proxy = None
+        while proxy is None:
+            temp_proxy = Services.proxoid.proxy.rotated_proxy
+            con = asyncio.open_connection(temp_proxy.ip, int(temp_proxy.port))
+            try:
+                r, w = await asyncio.wait_for(con, timeout=0.5)
+                w.close()
+                proxy = temp_proxy
+            except:
+                temp_proxy.report()
         try:
             await requester.async_run(proxy=proxy)
         except:
@@ -205,10 +205,10 @@ async def text_handler(message: types.Message):
             await message.answer("Извини, но такого промокода не существует или он уже активирован.")
             return
 
-    if user.rank_until:  # if time expiration set
-        if user.rank_until < time.time():  # if expire
+    if user.until:  # if time expiration set
+        if user.until < time.time():  # if expire
             await sql.change_rank(message.chat.id, cfg.DEFAULT_RANK, 0)  # set default rank
-            await message.answer(f'Ваш тариф закончился {stamp_to_date(user.rank_until)}')
+            await message.answer(f'Ваш тариф закончился {stamp_to_date(user.until)}')
             await text_handler(message)  # run handler again
             return  # exit
 
@@ -221,7 +221,7 @@ async def text_handler(message: types.Message):
                        f"<code>{_rank.count_threads}</code> <i>Потоков</i> - "
                        f"<code>{_rank.count_min}</code> <i>Минут</i> — "
                        f"<code>{_rank.price}</code><i>rub.</i>\n"
-                       f"Приобрести - /buy_{_rank.rank_id}"
+                       f"Приобрести - /buy_{_rank.id}"
                        for _rank in available_ranks])) + \
                    "\n\n\nВсе тарифы <b>приобритаются на год</b>!\n" \
                    "Возрата - нет."
@@ -236,7 +236,7 @@ async def text_handler(message: types.Message):
             if selected_rank:
                 selected_rank = selected_rank[0]
                 if selected_rank.for_sale:
-                    comment = gen_coment("tg_nano", message.chat.id, selected_rank.rank_id, selected_rank.price)
+                    comment = gen_coment("tg_nano", message.chat.id, selected_rank.id, selected_rank.price)
                     markup = types.InlineKeyboardMarkup()
                     markup.add(
                         types.InlineKeyboardButton("Оплатить", url=gen_url('79384302457', selected_rank.price, comment))
@@ -285,7 +285,7 @@ async def text_handler(message: types.Message):
                 f"<i>Потоков</i>: <code>{await sql.count_threads(message.chat.id)}</code>"
                 f"/"
                 f"<code>{rank.count_threads}</code>\n\n"
-                f"<b>Подписка до</b>: {subscribe_until(user.rank_until)}"
+                f"<b>Подписка до</b>: {subscribe_until(user.until)}"
             )
         elif rank.admin and message.text == 'ADM':
             markup = types.InlineKeyboardMarkup(resize_keyboard=True)
@@ -395,7 +395,7 @@ async def show_user_profile(chat_id, message_id, user, update_photo=True):
                 f"/"
                 f"<code>{rank.count_threads}</code>\n\n"
                 f"<b>Подписка до</b>: "
-                f"{subscribe_until(user.rank_until)}\n\n"
+                f"{subscribe_until(user.until)}\n\n"
                 f"<b>Telegram-Info:</b>\n"
                 f"Name: {tg_info.first_name}|{tg_info.last_name}\n"
                 f"Username: @{tg_info.username}",
@@ -406,7 +406,7 @@ async def show_user_profile(chat_id, message_id, user, update_photo=True):
 async def show_select_rank(chat_id, message_id, return_callback, back):
     markup = types.InlineKeyboardMarkup()
     markup.add(*[
-        types.InlineKeyboardButton(rank.name, callback_data=return_callback + f"::{rank.rank_id}")
+        types.InlineKeyboardButton(rank.name, callback_data=return_callback + f"::{rank.id}")
         for rank in await sql.get_ranks()
     ])
     markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data=back))
@@ -587,7 +587,7 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
             query.message.chat.id,
             query.message.message_id,
             caption=f"<b>Пользователей всего</b>: <code>{await sql.count_of_users()}</code>\n\n" +
-                    ("\n".join([f"{_rank['rank_id']}) {_rank['name']}: <code>{_rank['count']}</code>" for _rank in
+                    ("\n".join([f"{_rank['id']}) {_rank['name']}: <code>{_rank['count']}</code>" for _rank in
                                 await sql.get_rank_stats()])) +
                     F"\n\n<b>Запущеных потоков</b>: <code>{await sql.count_threads()}</code>",
             reply_markup=markup

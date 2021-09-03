@@ -1,8 +1,9 @@
 import asyncio
 import os
+import uuid
 from collections import namedtuple
 from typing import Iterable, Any
-import aiosqlite
+import aiomysql
 
 if os.name == 'nt':  # If os == Шindows
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # fix for "Asyncio Event Loop is Closed"
@@ -13,35 +14,45 @@ class Struct:
         self.__dict__.update(entries)
 
 
-def obj_factory(cursor, _row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0].replace('(', '').replace(')', '')] = _row[idx]
-    return namedtuple("Row", d.keys())(*d.values())
+obj_factory = "obj"
+dict_factory = "dict"
+normal_factory = None
 
 
-def dict_factory(cursor, _row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = _row[idx]
-    return d
+def check_str_in(string: str, vals: list[str]):
+    for val in vals:
+        if val in string:
+            return True
+    return False
 
 
 class Sql:
-    def __init__(self, db_name: str):
-        self.database = db_name
+    def __init__(self, host, user, password, db):
+        self.database = {"host": host, "user": user, "password": password, "db": db}
 
     async def async_query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type=obj_factory):
-        async with aiosqlite.connect(self.database, isolation_level=None) as db:
-            if _return:
-                db.row_factory = row_type
-                cursor = await db.execute(query, params)
-                if _return == 1:
-                    return await cursor.fetchall()
-                elif _return == 2:
-                    return cursor.lastrowid
+        query = query.replace("?", "%s")
+
+        async with aiomysql.connect(**self.database) as conn:
+            await conn.autocommit(True)
+            if row_type == normal_factory:
+                cur = await conn.cursor()
             else:
-                await db.execute(query, params)
+                cur = await conn.cursor(aiomysql.DictCursor)
+            await cur.execute(query, params)
+            if _return:
+                if _return == 1:
+                    data = await cur.fetchall()
+                    if row_type == obj_factory:
+                        tmp_data = data
+                        data = []
+                        for dictionary in tmp_data:
+                            for key in list(dictionary):
+                                dictionary[key.replace('(', '').replace(')', '').replace('`', '')] = dictionary.pop(key)
+                            data.append(namedtuple("fetch", dictionary.keys())(*dictionary.values()))
+                    return data
+                elif _return == 2:
+                    return cur.lastrowid
 
     def query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type=obj_factory):
         return asyncio.run(self.async_query(query, params, _return, row_type))
