@@ -14,14 +14,16 @@ class Struct:
         self.__dict__.update(entries)
 
 
-
-
-
 def check_str_in(string: str, vals: list[str]):
     for val in vals:
         if val in string:
             return True
     return False
+
+
+obj_factory = "obj"
+dict_factory = "dict"
+normal_factory = None
 
 
 class Sql:
