@@ -71,14 +71,14 @@ class Sql(sql.Sql):
             "SELECT COUNT(`chatid`) FROM `users`"
         ))[0].COUNTchatid
 
-    async def get_ranks(self, row_type=sql.obj_factory):
+    async def get_ranks(self, row_type="dict"):
         return await self.async_query(
             "SELECT `id`, `name` FROM `ranks` ORDER BY `id`",
             row_type=row_type
         )
 
     async def get_rank_stats(self):
-        ranks = await self.get_ranks(row_type=sql.dict_factory)
+        ranks = await self.get_ranks(row_type=self.dict_factory)
         i = 0
         for rank in ranks:
             count = (await self.async_query(

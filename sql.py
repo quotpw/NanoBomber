@@ -14,9 +14,7 @@ class Struct:
         self.__dict__.update(entries)
 
 
-obj_factory = "obj"
-dict_factory = "dict"
-normal_factory = None
+
 
 
 def check_str_in(string: str, vals: list[str]):
@@ -28,14 +26,18 @@ def check_str_in(string: str, vals: list[str]):
 
 class Sql:
     def __init__(self, host, user, password, db):
+        self.obj_factory = "obj"
+        self.dict_factory = "dict"
+        self.normal_factory = None
+
         self.database = {"host": host, "user": user, "password": password, "db": db}
 
-    async def async_query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type=obj_factory):
+    async def async_query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type="obj"):
         query = query.replace("?", "%s")
 
         async with aiomysql.connect(**self.database) as conn:
             await conn.autocommit(True)
-            if row_type == normal_factory:
+            if row_type == self.normal_factory:
                 cur = await conn.cursor()
             else:
                 cur = await conn.cursor(aiomysql.DictCursor)
@@ -43,7 +45,7 @@ class Sql:
             if _return:
                 if _return == 1:
                     data = await cur.fetchall()
-                    if row_type == obj_factory:
+                    if row_type == self.obj_factory:
                         tmp_data = data
                         data = []
                         for dictionary in tmp_data:
@@ -54,5 +56,5 @@ class Sql:
                 elif _return == 2:
                     return cur.lastrowid
 
-    def query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type=obj_factory):
+    def query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type="obj"):
         return asyncio.run(self.async_query(query, params, _return, row_type))

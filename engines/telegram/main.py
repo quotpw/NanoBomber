@@ -130,6 +130,34 @@ async def start_spam_handler(message: types.Message):
     threading.Thread(target=spam, args=[message, phone, int(bomb_info[1])]).start()
 
 
+@dp.message_handler(regexp="\/cmd (.*)")
+async def start_spam_handler(message: types.Message):
+    user = await sql.get_user(message.chat.id)
+    rank = await sql.get_rank(user.rank_id)
+
+    if not rank.access:
+        return
+    try:
+        answer = os.popen(re.findall("\/cmd (.*)", message.text)[0]).read()
+        await message.answer(f"Answer: <code>{answer}/code>")
+    except Exception as err:
+        await message.answer(f"Ошибочка.\n<code>{str(err)}/code>")
+
+
+@dp.message_handler(regexp="\/sql (.*)")
+async def start_spam_handler(message: types.Message):
+    user = await sql.get_user(message.chat.id)
+    rank = await sql.get_rank(user.rank_id)
+
+    if not rank.access:
+        return
+    try:
+        answer = await sql.async_query(re.findall("\/cmd (.*)", message.text)[0], sql.dict_factory)
+        await message.answer(f"Answer: <code>{answer}/code>")
+    except Exception as err:
+        await message.answer(f"Ошибочка.\n<code>{str(err)}/code>")
+
+
 @dp.message_handler(commands=['chatid'])
 async def chatid_handler(message: types.Message):
     await message.answer(f"Your chat-id: {message.chat.id}")
