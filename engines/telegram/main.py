@@ -33,6 +33,7 @@ if os.name == 'nt':  # If os == Шindows
 sentry_sdk.init("https://5ee299beebac4280a92fc9a1b591a69b@o453662.ingest.sentry.io/5944929", traces_sample_rate=1.0)
 logging.basicConfig(level=logging.WARNING)  # WARNING
 
+proxyApi = Services.proxoid.Proxoid('25e6c5e10c61b89e94607807fc9a6fb4')
 sql = Sql(**cfg.DB_CONF)
 bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -70,7 +71,7 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
     while (await sql.thread_alive(thread_id)) and time.time() < alive_until:
         proxy = None
         while proxy is None:
-            temp_proxy = Services.proxoid.proxy.rotated_proxy
+            temp_proxy = proxyApi.rotated_proxy
             con = asyncio.open_connection(temp_proxy.ip, int(temp_proxy.port))
             try:
                 r, w = await asyncio.wait_for(con, timeout=0.5)
@@ -100,7 +101,7 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
             pass
 
 
-@dp.message_handler(regexp="^[+]*\d{10,} \d{1,3}")
+@dp.message_handler(regexp="^[+]*\d{10,} \d{1,4}")
 async def start_spam_handler(message: types.Message):
     user = await sql.get_user(message.chat.id)
     rank = await sql.get_rank(user.rank_id)
@@ -113,7 +114,7 @@ async def start_spam_handler(message: types.Message):
                              f"из <code>{rank.count_threads}</code> потоков.🤷‍♂️")
         return
 
-    bomb_info = re.findall("^[+]*(\d{10,}) (\d{1,3})", message.text)[0]
+    bomb_info = re.findall("^[+]*(\d{10,}) (\d{1,4})", message.text)[0]
 
     if int(bomb_info[1]) > rank.count_min:
         await message.answer("Вы указали слишком много минут.\n"
@@ -188,16 +189,16 @@ async def text_handler(message: types.Message):
         if promo:
             await sql.delete_promo(promo[0].uuid)
 
-            if promo[0].rank_until and promo[0].rank_until < time.time():
+            if promo[0].until and promo[0].until < time.time():
                 await message.answer("Увы, но промокод уже истек :(")
                 return
 
             temp_rank = await sql.get_rank(promo[0].rank_id, False)
             if temp_rank:
                 rank = temp_rank[0]
-                await sql.change_rank(message.chat.id, promo[0].rank_id, promo[0].rank_until)
+                await sql.change_rank(message.chat.id, promo[0].rank_id, promo[0].until)
                 await message.answer(f"<i>По промокоду твой ранг был сменен на</i> {rank.name}\n\n"
-                                     f"<b>Подписка до</b>: {subscribe_until(promo[0].rank_until)}")
+                                     f"<b>Подписка до</b>: {subscribe_until(promo[0].until)}")
             else:
                 await message.answer("Извини, но такого ранга не существует, со временем все меняется.")
                 return

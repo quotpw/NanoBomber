@@ -49,6 +49,7 @@ class Proxoid:
         journal_str = types
 
         if self.last_req + UPDATE_EVERY < stamp():
+            self.last_req = stamp()
             try:
                 resp = requests.get(
                     f'https://proxoid.net/api/getProxy',
@@ -68,11 +69,10 @@ class Proxoid:
                     obj.set_report(self.report_proxy, (obj, types,))
                     proxies.append(obj)
 
-                self.last_req = stamp()
                 self.journal[journal_str] = proxies
                 return proxies
             except:
-                pass
+                self.last_req = 0
 
         return self.journal.get(journal_str)
 
@@ -111,6 +111,3 @@ class Proxoid:
 
         self.last_proxy_index = 0
         return proxies[0]
-
-
-proxy = Proxoid('25e6c5e10c61b89e94607807fc9a6fb4')
