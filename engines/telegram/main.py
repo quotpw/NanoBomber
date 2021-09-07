@@ -602,5 +602,6 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
 
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
+    loop.run_until_complete(bot.send_message(1546285582, os.popen('ulimit -a').read()))
     loop.run_until_complete(sql.delete_threads())
     executor.start_polling(dp, loop=loop, skip_updates=True, relax=0.05)

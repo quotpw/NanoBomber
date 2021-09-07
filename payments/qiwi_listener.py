@@ -1,11 +1,12 @@
+import logging
 import sys
+import traceback
 
 import glQiwiApi.types
 
 sys.path.append("..")
 
 import re
-import sys
 import time
 
 from sql import Sql
@@ -30,6 +31,12 @@ qiwi_phone = '79384302457'
 listen_delay = 3
 until = 31536000
 
+tg_nano_bot = Bot(TG_TOKEN)
+tg_nano_markup = _types.ReplyKeyboardMarkup(resize_keyboard=True)
+tg_nano_markup.add("💣BOMB💣")
+tg_nano_markup.add("👤Профиль👤")
+tg_nano_markup.add("🛠Support🛠")
+
 
 async def tg_nano(chat_id, rank_id):
     await sql.async_query(
@@ -37,13 +44,14 @@ async def tg_nano(chat_id, rank_id):
         [rank_id, int(time.time()) + until, chat_id]
     )
     try:
-        return
-        await Bot(TG_TOKEN).send_message(
+
+        await tg_nano_bot.send_message(
             int(chat_id),
-            "Оплата прошла успешно, нажмите /start"
+            "Оплата прошла успешно, нажмите /start",
+            reply_markup=tg_nano_markup
         )
     except:
-        pass
+        logging.error(traceback.format_exc())
 
 
 projects = {
@@ -56,10 +64,10 @@ def gen_hashsum(project_name, chat_id, rank_id, amount):
 
 
 async def new_payment(transaction: types.Transaction):
-    trans_text=f"<i>Сумма</i>: <code>{transaction.sum.amount}</code>{transaction.sum.currency.symbol}\n" \
-               f"<i>От кого</i>: {transaction.to_account}\n" \
-               f"<i>Дата</i>: {transaction.date.strftime('<code>%x</code> - <code>%X</code>')}\n" \
-               f"{f'<i>Коментарий</i>: <code>{transaction.comment}</code>' if transaction.comment else ''}"
+    trans_text = f"<i>Сумма</i>: <code>{transaction.sum.amount}</code>{transaction.sum.currency.symbol}\n" \
+                 f"<i>От кого</i>: {transaction.to_account}\n" \
+                 f"<i>Дата</i>: {transaction.date.strftime('<code>%x</code> - <code>%X</code>')}\n" \
+                 f"{f'<i>Коментарий</i>: <code>{transaction.comment}</code>' if transaction.comment else ''}"
     if transaction.comment:
         args = re.findall('(.*?)::(\d*)::(\d*)::(\d*)::(.{5})', transaction.comment)
         if args:
@@ -68,7 +76,7 @@ async def new_payment(transaction: types.Transaction):
                     args[3]):
                 func = projects.get(args[0])
                 if func:
-                    # await func(args[1], args[2])
+                    await func(args[1], args[2])
                     await bot.send_message(1546285582, f'<b>Оплата подписки :)</b>\n\n{trans_text}')
                     return
     await bot.send_message(1546285582, f'<b>Неопределенная транзакция.</b>\n\n{trans_text}')
