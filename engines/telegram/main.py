@@ -436,7 +436,7 @@ async def show_select_rank(chat_id, message_id, return_callback, back):
     markup = types.InlineKeyboardMarkup()
     markup.add(*[
         types.InlineKeyboardButton(rank.name, callback_data=return_callback + f"::{rank.id}")
-        for rank in await sql.get_ranks()
+        for rank in await sql.get_ranks(sql.obj_factory)
     ])
     markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data=back))
 
