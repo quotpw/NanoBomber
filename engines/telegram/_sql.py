@@ -16,8 +16,9 @@ class Sql(sql.Sql):
                     ref = ref[0]
 
         await self.async_query(
-            "INSERT INTO `users`(`chatid`, `refer`) VALUES(?, ?)",
-            [chat_id, ref],
+            f"INSERT INTO `users`(`chatid`{', `refer`' if ref is not None else ''}) "
+            f"VALUES(?{', ?' if ref is not None else ''})",
+            [chat_id, ref]if ref is not None else [chat_id],
             _return=0
         )
 
