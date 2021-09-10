@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 
@@ -6,19 +7,34 @@ import sql
 
 
 class Sql(sql.Sql):
-    async def create_user(self, chat_id, return_user=False):
+    async def create_user(self, chat_id, return_user=False, bot=None, message=None):
+        ref = None
+        if message is not None:
+            ref = re.findall("^/start ref(\d+)", message.text)
+            if ref:
+                if await self.get_user(ref[0], return_user=False):
+                    ref = ref[0]
+
         await self.async_query(
-            "INSERT INTO `users`(`chatid`) VALUES(?)",
-            [chat_id],
+            "INSERT INTO `users`(`chatid`, `refer`) VALUES(?, ?)",
+            [chat_id, ref],
             _return=0
         )
+
+        if ref is not None and bot is not None:
+            # noinspection PyTypeChecker
+            await bot.send_message(int(ref), "<b>У вас новый реферал!</b>\n\n"
+                                             f"<i>Chatid</i>: <code>{chat_id}</code>\n"
+                                             f"<i>Name</i>: <code>{message.chat.full_name}</code>\n"
+                                             f"<i>Username</i>: @{message.chat.username}")
+
         if return_user:
             return await self.get_user(chat_id)
 
     async def get_users_chatid(self):
         return [chatid[0] for chatid in await self.async_query("SELECT `chatid` FROM `users`", row_type=None)]
 
-    async def get_user(self, chat_id, return_user=True):
+    async def get_user(self, chat_id, return_user=True, bot=None, message=None):
         user = await self.async_query(
             'SELECT * FROM `users` WHERE `chatid` = ?',
             [chat_id]
@@ -28,7 +44,7 @@ class Sql(sql.Sql):
         elif not return_user:
             return user
         else:
-            return await self.create_user(chat_id, return_user=True)
+            return await self.create_user(chat_id, return_user=True, bot=bot, message=message)
 
     async def get_rank(self, rank_id, return_rank=True):
         rank = await self.async_query(
@@ -52,6 +68,26 @@ class Sql(sql.Sql):
         await self.async_query(
             "UPDATE `users` SET `until` = ? WHERE `chatid` = ?",
             [int(until), chat_id],
+            _return=0
+        )
+
+    async def count_of_refers(self, chat_id):
+        return (await self.async_query(
+            "SELECT COUNT(`chatid`) FROM `users` WHERE `refer` = ?",
+            [chat_id]
+        ))[0].COUNTchatid
+
+    async def balance_set(self, chat_id, balance):
+        await self.async_query(
+            f"UPDATE `users` SET `balance` = ? WHERE `chatid` = ?",
+            [balance, chat_id],
+            _return=0
+        )
+
+    async def balance_plus(self, chat_id, plus: int):
+        await self.async_query(
+            f"UPDATE `users` SET `balance` = `balance` + ? WHERE `chatid` = ?",
+            [plus, chat_id],
             _return=0
         )
 

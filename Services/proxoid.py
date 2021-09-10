@@ -28,14 +28,6 @@ class Proxy:
     def __repr__(self):
         return f'Proxy("{self.ip_port}", "{self.proxy_type}")'
 
-    def set_report(self, handler, args):
-        self.report_handler = handler
-        self.report_args = args
-
-    def report(self):
-        if self.report_handler is not None:
-            self.report_handler(*self.report_args)
-
 
 class Proxoid:
     def __init__(self, key, default_type="socks4"):
@@ -45,7 +37,7 @@ class Proxoid:
         self.last_req = 0
         self.last_proxy_index = None
 
-    def request(self, types='all', countries='all', level='all', speed=1000, count=0):
+    def request(self, types='all', countries='all', level='all', speed=1500, count=0):
         journal_str = types
 
         if self.last_req + UPDATE_EVERY < stamp():
@@ -66,7 +58,6 @@ class Proxoid:
                 proxies = []
                 for p in re.findall('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d*', resp):
                     obj = Proxy(p, types)
-                    obj.set_report(self.report_proxy, (obj, types,))
                     proxies.append(obj)
 
                 self.journal[journal_str] = proxies
@@ -84,16 +75,6 @@ class Proxoid:
             return self.request(self.default_type)
         else:
             return proxies
-
-    def report_proxy(self, bad_proxy: Proxy, types=None):
-        if types is None:
-            types = self.default_type
-        journal_str = str(types)
-
-        bad_proxy.errors += 1
-        if bad_proxy.errors >= MAX_ERRORS:
-            print("delete", bad_proxy)
-            self.journal[journal_str].remove(bad_proxy)
 
     @property
     def random_proxy(self):

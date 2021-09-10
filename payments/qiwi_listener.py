@@ -10,7 +10,8 @@ import re
 import time
 
 from sql import Sql
-from engines.telegram.config_file import DB_CONF, TG_TOKEN
+from engines.telegram.config_file import DB_CONF, TG_TOKEN, REF_PROC
+from engines.telegram import _sql
 import asyncio
 import os
 from hashlib import md5
@@ -26,25 +27,22 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 sentry_sdk.init("https://bc718a3b56bc431c900a306875f54628@o453662.ingest.sentry.io/5944931", traces_sample_rate=1.0)
 bot = Bot(token='1809099424:AAF9oqmz3IEXpdUmCFArpoiFWiJXJY0PF7w', parse_mode=_types.ParseMode.HTML)
 sql = Sql(**DB_CONF)
+nano_sql = _sql.Sql(**DB_CONF)
 qiwi_token = '6b58503ce511fd5b00146acbd29c60cd'
 qiwi_phone = '79384302457'
 listen_delay = 3
 until = 31536000
 
-tg_nano_bot = Bot(TG_TOKEN)
+tg_nano_bot = Bot(TG_TOKEN, parse_mode=_types.ParseMode.HTML)
 tg_nano_markup = _types.ReplyKeyboardMarkup(resize_keyboard=True)
 tg_nano_markup.add("💣BOMB💣")
 tg_nano_markup.add("👤Профиль👤")
 tg_nano_markup.add("🛠Support🛠")
 
 
-async def tg_nano(chat_id, rank_id):
-    await sql.async_query(
-        "UPDATE `users` SET `rank_id` = ?, `until` = ? WHERE `chatid` = ?",
-        [rank_id, int(time.time()) + until, chat_id]
-    )
+async def tg_nano(chat_id, rank_id, money: int):
+    await nano_sql.change_rank(chat_id, rank_id, int(time.time()) + until)
     try:
-
         await tg_nano_bot.send_message(
             int(chat_id),
             "Оплата прошла успешно, нажмите /start",
@@ -52,6 +50,23 @@ async def tg_nano(chat_id, rank_id):
         )
     except:
         logging.error(traceback.format_exc())
+
+    user = await nano_sql.get_user(chat_id, return_user=False)
+    if user:
+        user = user[0]
+        if user.refer is not None:
+            await nano_sql.balance_plus(user.refer, int(money * (REF_PROC / 100)))
+            try:
+                chat = await tg_nano_bot.get_chat(user.chatid)
+                await tg_nano_bot.send_message(
+                    user.refer,
+                    f"<b>Пользователь приобрел подписку за {money}rub, вам было начислено {int(money * (REF_PROC / 100))}rub.</b>\n\n"
+                    f"<i>Chatid</i>: <code>{chat.id}</code>\n"
+                    f"<i>Name</i>: <code>{chat.full_name}</code>\n"
+                    f"<i>Username</i>: @{chat.username}"
+                )
+            except:
+                logging.error(traceback.format_exc())
 
 
 projects = {
@@ -76,7 +91,7 @@ async def new_payment(transaction: types.Transaction):
                     args[3]):
                 func = projects.get(args[0])
                 if func:
-                    await func(args[1], args[2])
+                    await func(args[1], args[2], int(transaction.sum.amount))
                     await bot.send_message(1546285582, f'<b>Оплата подписки :)</b>\n\n{trans_text}')
                     return
     await bot.send_message(1546285582, f'<b>Неопределенная транзакция.</b>\n\n{trans_text}')
@@ -89,14 +104,11 @@ async def main():
             # noinspection PyTypeChecker
             transactions = await w.transactions(operation=glQiwiApi.types.TransactionType.IN)
             for trans in transactions:
-
-                print(trans)
                 count = (await sql.async_query(
                     "SELECT COUNT(`id`) FROM `qiwi_transactions` WHERE `id` = ?",
                     [int(trans.id)]
                 ))[0].COUNTid
                 if not count:
-                    print("okay")
                     await sql.async_query("INSERT INTO `qiwi_transactions` VALUES(?)", [trans.id])
                     await new_payment(trans)
                 else:

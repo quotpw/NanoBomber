@@ -28,14 +28,12 @@ class Requester:
 
     # noinspection PyMethodMayBeStatic,PyUnusedLocal
     def __exception_handler(self, loop, context):
-        print(loop, context)
         pass
 
     def set_http_requests(self, services: list[Service]):
         self.services = services
 
-    async def __request(self, session: aiohttp.ClientSession, semaphore,
-                        service: Service):
+    async def __request(self, session: aiohttp.ClientSession, semaphore, service: Service):
         try:
             async with semaphore, session.request(
                     method=service.method,
