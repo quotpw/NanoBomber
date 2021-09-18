@@ -113,7 +113,7 @@ async def start_spam(message, rank, number: str, minutes: str = None) -> list:
         if int(minutes) > rank.count_min:
             return [
                 False,
-                "Вы указали слишком много минут.\n<i>Вам доступно: </i><code>{rank.count_min}</code> минут."
+                f"Вы указали слишком много минут.\n<i>Вам доступно: </i><code>{rank.count_min}</code> минут."
             ]
 
     phone = Services.phone.Phone(number)
