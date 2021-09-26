@@ -32,7 +32,7 @@ class Sql:
         self.dict_factory = "dict"
         self.normal_factory = None
 
-        self.database = {"host": host, "user": user, "password": password, "db": db}
+        self.database = {"host": host, "user": user, "password": password, "db": db, "port": 3306}
 
     async def async_query(self, query: str, params: Iterable[Any] = None, _return: int = 1, row_type="obj"):
         query = query.replace("?", "%s")
