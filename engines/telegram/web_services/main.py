@@ -11,7 +11,6 @@ import Services
 from sql import Sql
 from engines.telegram.config_file import DB_CONF
 
-sentry_sdk.init("https://1d85405c99be48b78d56623a552cb305@o453662.ingest.sentry.io/5944955", traces_sample_rate=1.0)
 app = Flask(__name__)
 auth = HTTPBasicAuth()
 sql = Sql(**DB_CONF)
