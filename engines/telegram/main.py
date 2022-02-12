@@ -30,10 +30,9 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 if os.name == 'nt':  # If os == Шindows
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # fix for "Asyncio Event Loop is Closed"
 
-sentry_sdk.init("https://5ee299beebac4280a92fc9a1b591a69b@o453662.ingest.sentry.io/5944929", traces_sample_rate=1.0)
 logging.basicConfig(level=logging.WARNING)  # WARNING
 
-proxyApi = Services.proxoid.Proxoid('25e6c5e10c61b89e94607807fc9a6fb4')
+proxyApi = Services.proxoid.Proxoid('api_key')
 sql = Sql(**cfg.DB_CONF)
 bot = Bot(token=cfg.TG_TOKEN, parse_mode=types.ParseMode.HTML)
 bot_info = None
