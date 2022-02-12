@@ -1,2 +1,3 @@
-# NanoBomber bot - t.me/nanobomber
+# NanoBomber - async telegram bot
+Used for: https://t.me/nanobomber
 Docker ported version :)
