@@ -24,12 +24,11 @@ import sentry_sdk
 
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-sentry_sdk.init("https://bc718a3b56bc431c900a306875f54628@o453662.ingest.sentry.io/5944931", traces_sample_rate=1.0)
-bot = Bot(token='1809099424:AAF9oqmz3IEXpdUmCFArpoiFWiJXJY0PF7w', parse_mode=_types.ParseMode.HTML)
+bot = Bot(token='payment notifier tg token', parse_mode=_types.ParseMode.HTML)
 sql = Sql(**DB_CONF)
 nano_sql = _sql.Sql(**DB_CONF)
-qiwi_token = '6b58503ce511fd5b00146acbd29c60cd'
-qiwi_phone = '79384302457'
+qiwi_token = 'qiwi token'
+qiwi_phone = 'phone token'
 listen_delay = 3
 until = 31536000
 
@@ -92,9 +91,9 @@ async def new_payment(transaction: types.Transaction):
                 func = projects.get(args[0])
                 if func:
                     await func(args[1], args[2], int(transaction.sum.amount))
-                    await bot.send_message(1546285582, f'<b>Оплата подписки :)</b>\n\n{trans_text}')
+                    await bot.send_message(admin_chat_id, f'<b>Оплата подписки :)</b>\n\n{trans_text}')
                     return
-    await bot.send_message(1546285582, f'<b>Неопределенная транзакция.</b>\n\n{trans_text}')
+    await bot.send_message(admin_chat_id, f'<b>Неопределенная транзакция.</b>\n\n{trans_text}')
 
 
 async def main():
